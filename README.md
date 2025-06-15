@@ -75,7 +75,7 @@ The Chip-8 is an interpreted programming language developed in the 1970s for use
 1. **Clone the repository:**
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/IvanDec0/chip8_go
    cd chip8
    ```
 

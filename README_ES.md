@@ -73,7 +73,7 @@ El Chip-8 es un lenguaje de programación interpretado desarrollado en la décad
 1. **Clonar el repositorio:**
 
    ```bash
-   git clone <url-repositorio>
+   git clone https://github.com/IvanDec0/chip8_go
    cd chip8
    ```
 
