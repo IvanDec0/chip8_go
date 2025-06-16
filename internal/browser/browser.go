@@ -2,20 +2,27 @@ package browser
 
 import (
 	"chip8/internal/menu"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 // FileBrowser implements the Browser interface
 type FileBrowser struct {
-	currentDir  string
-	roms        []menu.ROMInfo
-	lastScan    time.Time
-	scanCache   map[string][]menu.ROMInfo
-	maxCacheAge time.Duration
+	currentDir        string
+	roms              []menu.ROMInfo
+	lastScan          time.Time
+	scanCache         map[string][]menu.ROMInfo
+	cacheMutex        sync.RWMutex // Protects scanCache and lastScan
+	maxCacheAge       time.Duration
+	metadataExtractor *MetadataExtractor
+	recentManager     *RecentManager
+	favoritesManager  *FavoritesManager
+	cacheManager      *CacheManager
 }
 
 // NewFileBrowser creates a new file browser
@@ -30,22 +37,32 @@ func NewFileBrowser(initialDir string) *FileBrowser {
 		absDir = initialDir
 	}
 
+	// Initialize data directory for user data
+	dataDir := getDataDirectory()
+
 	return &FileBrowser{
-		currentDir:  absDir,
-		roms:        make([]menu.ROMInfo, 0),
-		scanCache:   make(map[string][]menu.ROMInfo),
-		maxCacheAge: time.Minute * 5, // Cache for 5 minutes
+		currentDir:        absDir,
+		roms:              make([]menu.ROMInfo, 0),
+		scanCache:         make(map[string][]menu.ROMInfo),
+		maxCacheAge:       time.Minute * 5, // Cache for 5 minutes
+		metadataExtractor: NewMetadataExtractor(),
+		recentManager:     NewRecentManager(filepath.Join(dataDir, "recent.json"), 20),
+		favoritesManager:  NewFavoritesManager(filepath.Join(dataDir, "favorites.json")),
+		cacheManager:      NewCacheManager(DefaultCacheConfig()),
 	}
 }
 
 // ScanDirectory scans a directory for ROM files and subdirectories
 func (fb *FileBrowser) ScanDirectory(path string) ([]menu.ROMInfo, error) {
-	// Check cache first
+	// Check cache first with read lock
+	fb.cacheMutex.RLock()
 	if cached, exists := fb.scanCache[path]; exists {
 		if time.Since(fb.lastScan) < fb.maxCacheAge {
+			fb.cacheMutex.RUnlock()
 			return cached, nil
 		}
 	}
+	fb.cacheMutex.RUnlock()
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -108,9 +125,11 @@ func (fb *FileBrowser) ScanDirectory(path string) ([]menu.ROMInfo, error) {
 		return strings.ToLower(roms[i].Name) < strings.ToLower(roms[j].Name)
 	})
 
-	// Cache the results
+	// Cache the results with write lock
+	fb.cacheMutex.Lock()
 	fb.scanCache[path] = roms
 	fb.lastScan = time.Now()
+	fb.cacheMutex.Unlock()
 
 	return roms, nil
 }
@@ -186,8 +205,10 @@ func (fb *FileBrowser) NavigateUp() error {
 
 // Refresh rescans the current directory, clearing cache
 func (fb *FileBrowser) Refresh() error {
-	// Clear cache for current directory
+	// Clear cache for current directory with write lock
+	fb.cacheMutex.Lock()
 	delete(fb.scanCache, fb.currentDir)
+	fb.cacheMutex.Unlock()
 	return fb.SetCurrentDirectory(fb.currentDir)
 }
 
@@ -281,5 +302,160 @@ func (fb *FileBrowser) ScanDirectoryWithFallback(path string) ([]menu.ROMInfo, e
 		Type:    ErrorNotFound,
 		Message: "No ROM directories found. Tried: " + path,
 		Cause:   err,
+	}
+}
+
+// getDataDirectory returns the application data directory
+func getDataDirectory() string {
+	//home := os.Getenv("HOME")
+	home := "."
+	if home == "" {
+		return "."
+	}
+	dataDir := filepath.Join(home, ".chip8")
+	os.MkdirAll(dataDir, 0755)
+	return dataDir
+}
+
+// GetMetadataExtractor returns the metadata extractor
+func (fb *FileBrowser) GetMetadataExtractor() *MetadataExtractor {
+	return fb.metadataExtractor
+}
+
+// GetRecentManager returns the recent manager
+func (fb *FileBrowser) GetRecentManager() *RecentManager {
+	return fb.recentManager
+}
+
+// GetFavoritesManager returns the favorites manager
+func (fb *FileBrowser) GetFavoritesManager() *FavoritesManager {
+	return fb.favoritesManager
+}
+
+// GetCacheManager returns the cache manager
+func (fb *FileBrowser) GetCacheManager() *CacheManager {
+	return fb.cacheManager
+}
+
+// ScanDirectoryWithMetadata scans directory and includes metadata
+func (fb *FileBrowser) ScanDirectoryWithMetadata(path string) ([]menu.ROMInfo, error) {
+	roms, err := fb.ScanDirectory(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Preload metadata for ROM files in background
+	go fb.preloadMetadata(roms)
+
+	return roms, nil
+}
+
+// preloadMetadata preloads metadata for ROMs in background
+func (fb *FileBrowser) preloadMetadata(roms []menu.ROMInfo) {
+	for _, rom := range roms {
+		if !rom.IsDirectory && isROMFile(rom.Name) {
+			// Extract metadata (will be cached)
+			fb.metadataExtractor.ExtractMetadata(rom.Path)
+		}
+	}
+}
+
+// GetRecentROMs returns recent ROMs in interface format
+func (fb *FileBrowser) GetRecentROMs() []menu.RecentROM {
+	recent := fb.recentManager.GetRecentROMs()
+	result := make([]menu.RecentROM, len(recent))
+
+	for i, rom := range recent {
+		result[i] = menu.RecentROM{
+			Path:       rom.Path,
+			Name:       rom.Name,
+			LastPlayed: rom.LastPlayed.Format("2006-01-02 15:04"),
+			PlayCount:  rom.PlayCount,
+			IsFavorite: rom.IsFavorite,
+		}
+	}
+
+	return result
+}
+
+// GetFavorites returns favorites in interface format
+func (fb *FileBrowser) GetFavorites() []menu.FavoriteROM {
+	favorites := fb.favoritesManager.GetFavorites()
+	result := make([]menu.FavoriteROM, len(favorites))
+
+	for i, fav := range favorites {
+		result[i] = menu.FavoriteROM{
+			Path:       fav.Path,
+			Name:       fav.Name,
+			CustomName: fav.CustomName,
+			Rating:     fav.Rating,
+			Tags:       fav.Tags,
+			DateAdded:  fav.DateAdded.Format("2006-01-02"),
+		}
+	}
+
+	return result
+}
+
+// IsFavorite checks if a ROM is favorited
+func (fb *FileBrowser) IsFavorite(romPath string) bool {
+	return fb.favoritesManager.IsFavorite(romPath)
+}
+
+// GetROMMetadata returns metadata in interface format
+func (fb *FileBrowser) GetROMMetadata(romPath string) (*menu.ROMMetadata, error) {
+	metadata, err := fb.metadataExtractor.ExtractMetadata(romPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &menu.ROMMetadata{
+		Title:       metadata.Title,
+		Author:      metadata.Author,
+		Description: metadata.Description,
+		Controls:    metadata.Controls,
+		Year:        metadata.Year,
+		System:      metadata.System,
+	}, nil
+}
+
+// AddToRecent adds a ROM to recent list
+func (fb *FileBrowser) AddToRecent(romPath, romName string) error {
+	return fb.recentManager.AddRecentROM(romPath, romName)
+}
+
+// ToggleFavorite toggles favorite status for a ROM
+func (fb *FileBrowser) ToggleFavorite(romPath, romName string) error {
+	if fb.favoritesManager.IsFavorite(romPath) {
+		return fb.favoritesManager.RemoveFavorite(romPath)
+	} else {
+		return fb.favoritesManager.AddFavorite(romPath, romName)
+	}
+}
+
+// LoadUserData loads recent ROMs and favorites from disk
+func (fb *FileBrowser) LoadUserData() error {
+	// Load recent ROMs
+	if err := fb.recentManager.LoadFromFile(); err != nil {
+		// Non-fatal error, just log it
+		fmt.Printf("Warning: Failed to load recent ROMs: %v\n", err)
+	}
+
+	// Load favorites
+	if err := fb.favoritesManager.LoadFromFile(); err != nil {
+		// Non-fatal error, just log it
+		fmt.Printf("Warning: Failed to load favorites: %v\n", err)
+	}
+
+	// Start cache cleanup
+	fb.cacheManager.StartCleanup()
+
+	return nil
+}
+
+// Close cleans up resources
+func (fb *FileBrowser) Close() {
+	if fb.cacheManager != nil {
+		fb.cacheManager.StopCleanup()
 	}
 }

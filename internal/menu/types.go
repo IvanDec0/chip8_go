@@ -25,6 +25,44 @@ func (s EmulatorState) String() string {
 	}
 }
 
+// MenuScreen represents different menu screens
+type MenuScreen int
+
+const (
+	ScreenMain MenuScreen = iota
+	ScreenBrowser
+	ScreenRecent
+	ScreenFavorites
+	ScreenSearch
+	ScreenSettings
+	ScreenHelp
+	ScreenExport
+)
+
+// String returns a string representation of the menu screen
+func (s MenuScreen) String() string {
+	switch s {
+	case ScreenMain:
+		return "Main Menu"
+	case ScreenBrowser:
+		return "ROM Browser"
+	case ScreenRecent:
+		return "Recent ROMs"
+	case ScreenFavorites:
+		return "Favorites"
+	case ScreenSearch:
+		return "Search"
+	case ScreenSettings:
+		return "Settings"
+	case ScreenHelp:
+		return "Help"
+	case ScreenExport:
+		return "Export"
+	default:
+		return "Unknown"
+	}
+}
+
 // MenuData holds menu-specific information
 type MenuData struct {
 	SelectedROM   string
@@ -47,6 +85,22 @@ const (
 	ActionLoadROM
 	ActionExit
 	ActionGoBack
+	ActionShowRecent
+	ActionShowFavorites
+	ActionToggleFavorite
+	ActionAddToRecent
+	ActionStartSearch
+	ActionClearSearch
+	ActionShowSettings
+	ActionToggleSort
+	ActionNextSort
+	ActionRefresh
+	ActionShowHelp
+	ActionShowHelpContent
+	ActionShowExport
+	ActionExportFavorites
+	ActionExportRecent
+	ActionExportStatistics
 )
 
 // String returns a string representation of the menu action
@@ -60,6 +114,38 @@ func (a MenuAction) String() string {
 		return "Exit"
 	case ActionGoBack:
 		return "GoBack"
+	case ActionShowRecent:
+		return "ShowRecent"
+	case ActionShowFavorites:
+		return "ShowFavorites"
+	case ActionToggleFavorite:
+		return "ToggleFavorite"
+	case ActionAddToRecent:
+		return "AddToRecent"
+	case ActionStartSearch:
+		return "StartSearch"
+	case ActionClearSearch:
+		return "ClearSearch"
+	case ActionShowSettings:
+		return "ShowSettings"
+	case ActionToggleSort:
+		return "ToggleSort"
+	case ActionNextSort:
+		return "NextSort"
+	case ActionRefresh:
+		return "Refresh"
+	case ActionShowHelp:
+		return "ShowHelp"
+	case ActionShowHelpContent:
+		return "ShowHelpContent"
+	case ActionShowExport:
+		return "ShowExport"
+	case ActionExportFavorites:
+		return "ExportFavorites"
+	case ActionExportRecent:
+		return "ExportRecent"
+	case ActionExportStatistics:
+		return "ExportStatistics"
 	default:
 		return "Unknown"
 	}
@@ -80,6 +166,7 @@ const (
 	MenuInputSelect
 	MenuInputBack
 	MenuInputExit
+	MenuInputToggleFavorite
 )
 
 // String returns a string representation of the menu input type
@@ -95,6 +182,8 @@ func (t MenuInputType) String() string {
 		return "Back"
 	case MenuInputExit:
 		return "Exit"
+	case MenuInputToggleFavorite:
+		return "ToggleFavorite"
 	default:
 		return "Unknown"
 	}
@@ -132,6 +221,35 @@ func DefaultMenuTheme() MenuTheme {
 	}
 }
 
+// RecentROM represents a recently played ROM for the interface
+type RecentROM struct {
+	Path       string
+	Name       string
+	LastPlayed string
+	PlayCount  int
+	IsFavorite bool
+}
+
+// FavoriteROM represents a favorited ROM for the interface
+type FavoriteROM struct {
+	Path       string
+	Name       string
+	CustomName string
+	Rating     int
+	Tags       []string
+	DateAdded  string
+}
+
+// ROMMetadata represents ROM metadata for the interface
+type ROMMetadata struct {
+	Title       string
+	Author      string
+	Description []string
+	Controls    []string
+	Year        string
+	System      string
+}
+
 // ROMBrowser interface for ROM file browsing functionality
 type ROMBrowser interface {
 	ScanDirectory(path string) ([]ROMInfo, error)
@@ -140,4 +258,14 @@ type ROMBrowser interface {
 	GetCurrentDirectory() string
 	NavigateUp() error
 	Refresh() error
+
+	// Phase 3 enhancements
+	ScanDirectoryWithMetadata(path string) ([]ROMInfo, error)
+	GetROMMetadata(romPath string) (*ROMMetadata, error)
+	AddToRecent(romPath, romName string) error
+	GetRecentROMs() []RecentROM
+	GetFavorites() []FavoriteROM
+	ToggleFavorite(romPath, romName string) error
+	IsFavorite(romPath string) bool
+	LoadUserData() error
 }

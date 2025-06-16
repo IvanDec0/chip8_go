@@ -3,6 +3,7 @@ package emulator
 import (
 	"chip8/internal/audio"
 	"chip8/internal/browser"
+	configpkg "chip8/internal/config"
 	"chip8/internal/core"
 	"chip8/internal/input"
 	"chip8/internal/menu"
@@ -38,11 +39,12 @@ type Config struct {
 
 // Emulator coordinates all emulator components
 type Emulator struct {
-	cpu      *core.CPU
-	audio    audio.AudioSystem
-	renderer renderer.Renderer
-	input    *input.ExtendedHandler // Changed to ExtendedHandler
-	config   Config
+	cpu           *core.CPU
+	audio         audio.AudioSystem
+	renderer      renderer.Renderer
+	input         *input.ExtendedHandler // Changed to ExtendedHandler
+	config        Config
+	configManager *configpkg.ConfigManager // Add configuration manager
 	// New state management fields
 	stateManager *menu.StateManager
 	menuManager  *menu.Manager
@@ -71,8 +73,12 @@ func New(config Config) (*Emulator, error) {
 	stateManager := menu.NewStateManager()
 	menuManager := menu.NewManager()
 
+	// Initialize configuration manager
+	configManager := configpkg.NewConfigManager("")
+
 	// Set the shared state manager in menu manager
 	menuManager.SetStateManager(stateManager)
+	menuManager.SetConfigManager(configManager)
 
 	// Create menu renderer
 	var menuRenderer *menu.MenuRenderer
@@ -98,18 +104,33 @@ func New(config Config) (*Emulator, error) {
 		inputHandler.SetMenuMode(false)
 	}
 
-	return &Emulator{
-		cpu:          cpu,
-		audio:        audioSystem,
-		renderer:     sdlRenderer,
-		input:        inputHandler,
-		config:       config,
-		stateManager: stateManager,
-		menuManager:  menuManager,
-		menuRenderer: menuRenderer,
-		browser:      fileBrowser,
-		initialized:  false,
-	}, nil
+	emulator := &Emulator{
+		cpu:           cpu,
+		audio:         audioSystem,
+		renderer:      sdlRenderer,
+		input:         inputHandler,
+		config:        config,
+		configManager: configManager,
+		stateManager:  stateManager,
+		menuManager:   menuManager,
+		menuRenderer:  menuRenderer,
+		browser:       fileBrowser,
+		initialized:   false,
+	}
+
+	// Load user configuration and data
+	if err := emulator.LoadUserConfig(); err != nil {
+		// Non-fatal error, use defaults
+		fmt.Printf("Warning: Failed to load user config: %v\n", err)
+	}
+
+	// Load user data (recent ROMs, favorites)
+	if err := fileBrowser.LoadUserData(); err != nil {
+		// Non-fatal error
+		fmt.Printf("Warning: Failed to load user data: %v\n", err)
+	}
+
+	return emulator, nil
 }
 
 // Initialize initializes all emulator subsystems
@@ -168,11 +189,41 @@ func (e *Emulator) Run() {
 		case menu.StateMenu:
 			// Ensure menu has items
 			if len(e.menuManager.GetMenuItems()) == 0 {
-				// Force reload main menu items
+				// Force reload main menu items using the proper function
 				e.menuManager.SetMenuItems([]menu.MenuItem{
 					{
 						Text:   "Browse ROMs",
 						Action: menu.ActionBrowseROMs,
+						Data:   nil,
+					},
+					{
+						Text:   "Recent ROMs",
+						Action: menu.ActionShowRecent,
+						Data:   nil,
+					},
+					{
+						Text:   "Favorites",
+						Action: menu.ActionShowFavorites,
+						Data:   nil,
+					},
+					{
+						Text:   "Search ROMs",
+						Action: menu.ActionStartSearch,
+						Data:   nil,
+					},
+					{
+						Text:   "Settings",
+						Action: menu.ActionShowSettings,
+						Data:   nil,
+					},
+					{
+						Text:   "Help",
+						Action: menu.ActionShowHelp,
+						Data:   nil,
+					},
+					{
+						Text:   "Export Data",
+						Action: menu.ActionShowExport,
 						Data:   nil,
 					},
 					{
@@ -286,14 +337,28 @@ func (e *Emulator) render() {
 
 // renderMenu renders the current menu state
 func (e *Emulator) renderMenu() {
-	currentState := e.stateManager.GetCurrentState()
+	currentScreen := e.menuManager.GetCurrentScreen()
 
-	switch currentState {
-	case menu.StateMenu:
+	switch currentScreen {
+	case menu.ScreenMain:
 		// Render main menu
 		items := e.menuManager.GetMenuItems()
 		selected := e.menuManager.GetSelectedItem()
 		e.menuRenderer.RenderMainMenu(items, selected)
+
+	case menu.ScreenHelp:
+		// Render help screen
+		items := e.menuManager.GetMenuItems()
+		selected := e.menuManager.GetSelectedItem()
+		helpContent := e.menuManager.GetCurrentHelp()
+		e.menuRenderer.RenderHelpScreen(items, selected, helpContent)
+
+	case menu.ScreenExport:
+		// Render export screen
+		items := e.menuManager.GetMenuItems()
+		selected := e.menuManager.GetSelectedItem()
+		exportStatus := e.menuManager.GetExportStatus()
+		e.menuRenderer.RenderExportScreen(items, selected, exportStatus)
 
 	default:
 		// Check if we're in ROM browser mode by looking at menu items
@@ -397,4 +462,68 @@ func (e *Emulator) initializeMenu() error {
 	}
 
 	return nil
+}
+
+// LoadUserConfig loads user configuration
+func (e *Emulator) LoadUserConfig() error {
+	if e.configManager == nil {
+		e.configManager = configpkg.NewConfigManager("")
+	}
+
+	err := e.configManager.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load user config: %w", err)
+	}
+
+	// Apply configuration to emulator
+	return e.ApplyConfiguration(e.configManager.GetUserConfig())
+}
+
+// SaveUserConfig saves user configuration
+func (e *Emulator) SaveUserConfig() error {
+	if e.configManager == nil {
+		return fmt.Errorf("config manager not initialized")
+	}
+
+	// Update config with current emulator state
+	userConfig := e.configManager.GetUserConfig()
+	userConfig.EmulatorConfig.DefaultScale = e.config.Scale
+	userConfig.EmulatorConfig.DefaultSpeed = e.config.CyclesPerSecond
+	userConfig.EmulatorConfig.AudioVolume = e.config.AudioConfig.Volume
+	userConfig.EmulatorConfig.AudioFrequency = e.config.AudioConfig.Frequency
+	userConfig.EmulatorConfig.BeepFrequency = e.config.AudioConfig.BeepFrequency
+
+	return e.configManager.SaveConfig()
+}
+
+// ApplyConfiguration applies user configuration to emulator components
+func (e *Emulator) ApplyConfiguration(userConfig *configpkg.UserConfig) error {
+	if userConfig == nil {
+		return fmt.Errorf("user config is nil")
+	}
+
+	// Apply emulator config
+	e.config.Scale = userConfig.EmulatorConfig.DefaultScale
+	e.config.CyclesPerSecond = userConfig.EmulatorConfig.DefaultSpeed
+	e.config.AudioConfig.Volume = userConfig.EmulatorConfig.AudioVolume
+	e.config.AudioConfig.Frequency = userConfig.EmulatorConfig.AudioFrequency
+	e.config.AudioConfig.BeepFrequency = userConfig.EmulatorConfig.BeepFrequency
+
+	// Apply menu config
+	e.config.MenuConfig.Enabled = userConfig.MenuConfig.Enabled
+	e.config.MenuConfig.DefaultROMDir = userConfig.MenuConfig.DefaultROMDirectory
+
+	// Apply theme config to menu
+	if e.menuManager != nil {
+		e.menuManager.SetConfigManager(e.configManager)
+	}
+
+	// Note: Input config would need to be applied if ExtendedHandler supports it
+
+	return nil
+}
+
+// GetConfigManager returns the configuration manager
+func (e *Emulator) GetConfigManager() *configpkg.ConfigManager {
+	return e.configManager
 }

@@ -12,6 +12,16 @@ type Browser interface {
 	GetCurrentDirectory() string
 	NavigateUp() error
 	Refresh() error
+
+	// Phase 3 enhancements
+	ScanDirectoryWithMetadata(path string) ([]menu.ROMInfo, error)
+	GetROMMetadata(romPath string) (*menu.ROMMetadata, error)
+	AddToRecent(romPath, romName string) error
+	GetRecentROMs() []menu.RecentROM
+	GetFavorites() []menu.FavoriteROM
+	ToggleFavorite(romPath, romName string) error
+	IsFavorite(romPath string) bool
+	LoadUserData() error
 }
 
 // BrowserError represents browser-specific errors

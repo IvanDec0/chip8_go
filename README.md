@@ -161,6 +161,17 @@ Chip-8 Keypad    Keyboard Mapping
 - **ESC**: Exit emulator
 - **Window Close (X)**: Exit emulator
 
+### Menu Controls
+
+When browsing ROMs in the menu:
+
+- **↑/↓ or W/S**: Navigate up/down through ROM list
+- **Enter or Space**: Select ROM to load
+- **F**: Toggle ROM as favorite ⭐
+- **ESC**: Go back or exit to system
+
+The favorites system allows you to mark your favorite ROMs with a star (⭐) for quick access.
+
 ## Advanced Features
 
 ### Sound System

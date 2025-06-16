@@ -85,6 +85,7 @@ func NewExtendedHandler() *ExtendedHandler {
 			sdl.K_SPACE:     menu.MenuInputSelect,
 			sdl.K_ESCAPE:    menu.MenuInputBack,
 			sdl.K_BACKSPACE: menu.MenuInputBack,
+			sdl.K_f:         menu.MenuInputToggleFavorite, // 'F' key to toggle favorites
 		},
 	}
 }

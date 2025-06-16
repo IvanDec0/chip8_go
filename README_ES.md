@@ -159,6 +159,17 @@ Teclado Chip-8    Mapeo de Teclado
 - **ESC**: Salir del emulador
 - **Cerrar Ventana (X)**: Salir del emulador
 
+### Controles del menú
+
+Al navegar por ROMs en el menú:
+
+- **↑/↓ o W/S**: Navegar arriba/abajo por la lista de ROMs.
+- **Intro o Espacio**: Seleccionar ROM a cargar
+- **F**: Alternar ROM como favorita ⭐
+- **ESC**: Volver atrás o salir al sistema
+
+El sistema de favoritos te permite marcar tus ROMs favoritas con una estrella (⭐) para un acceso rápido.
+
 ## Características Avanzadas
 
 ### Sistema de Sonido
