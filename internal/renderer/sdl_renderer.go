@@ -1,19 +1,26 @@
 package renderer
 
 import (
+	"chip8/internal/menu"
+
 	"github.com/veandco/go-sdl2/sdl"
 )
 
 // SDLRenderer implements Renderer using SDL2
 type SDLRenderer struct {
-	window   *sdl.Window
-	renderer *sdl.Renderer
-	config   Config
+	window       *sdl.Window
+	renderer     *sdl.Renderer
+	config       Config
+	fontRenderer *FontRenderer
+	// New fields for text rendering
+	backgroundColor menu.Color
 }
 
 // NewSDLRenderer creates a new SDL-based renderer
 func NewSDLRenderer() *SDLRenderer {
-	return &SDLRenderer{}
+	return &SDLRenderer{
+		fontRenderer: NewFontRenderer(),
+	}
 }
 
 // Initialize sets up the SDL window and renderer
@@ -80,4 +87,20 @@ func (r *SDLRenderer) Close() {
 	if r.window != nil {
 		r.window.Destroy()
 	}
+}
+
+// SetBackgroundColor sets the background color for rendering
+func (r *SDLRenderer) SetBackgroundColor(color menu.Color) {
+	r.backgroundColor = color
+}
+
+// ClearWithColor clears the screen with a specific color
+func (r *SDLRenderer) ClearWithColor(color menu.Color) {
+	r.renderer.SetDrawColor(color.R, color.G, color.B, color.A)
+	r.renderer.Clear()
+}
+
+// RenderText renders text at the specified position using bitmap font
+func (r *SDLRenderer) RenderText(text string, x, y int, color menu.Color) error {
+	return r.fontRenderer.RenderString(r.renderer, text, x, y, color)
 }

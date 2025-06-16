@@ -76,7 +76,7 @@ The Chip-8 is an interpreted programming language developed in the 1970s for use
 
    ```bash
    git clone https://github.com/IvanDec0/chip8_go
-   cd chip8
+   cd chip8_go
    ```
 
 2. **Install dependencies:**
@@ -181,7 +181,7 @@ Perfect for different use cases:
 ## Project Structure
 
 ```
-chip8/
+chip8_go/
 ├── main.go                    # Simple entry point and configuration
 ├── internal/                  # Private implementation packages
 │   ├── core/                  # Pure CHIP-8 CPU logic (no dependencies)

@@ -74,7 +74,7 @@ El Chip-8 es un lenguaje de programación interpretado desarrollado en la décad
 
    ```bash
    git clone https://github.com/IvanDec0/chip8_go
-   cd chip8
+   cd chip8_go
    ```
 
 2. **Instalar dependencias:**
@@ -179,7 +179,7 @@ Perfecto para diferentes casos de uso:
 ## Estructura del Proyecto
 
 ```
-chip8/
+chip8_go/
 ├── main.go                    # Punto de entrada simple y configuración
 ├── internal/                  # Paquetes de implementación privados
 │   ├── core/                  # Lógica pura de CPU CHIP-8 (sin dependencias)
