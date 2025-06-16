@@ -551,10 +551,22 @@ func (mr *MenuRenderer) renderExportStatus(status string) error {
 	x := layout.MarginLeft
 	y := layout.HeaderHeight + layout.MarginTop + 10
 
-	// Add a colored background or border to make it stand out
-	err := mr.baseRenderer.RenderText("Status: "+status, x, y, mr.theme.SelectedColor)
-	if err != nil {
-		return fmt.Errorf("failed to render export status: %w", err)
+	// Format status message with proper wrapping
+	statusText := "Status: " + status
+
+	// Calculate available width for text (window width minus margins)
+	availableWidth := mr.layout.WindowWidth - (layout.MarginLeft * 2)
+
+	// Wrap long status messages
+	lines := mr.wrapText(statusText, availableWidth)
+
+	// Render each line
+	for i, line := range lines {
+		lineY := y + (i * (mr.layout.CharHeight + 2)) // Add small spacing between lines
+		err := mr.baseRenderer.RenderText(line, x, lineY, mr.theme.SelectedColor)
+		if err != nil {
+			return fmt.Errorf("failed to render export status line %d: %w", i, err)
+		}
 	}
 
 	return nil

@@ -2,42 +2,58 @@ package menu
 
 import (
 	"chip8/internal/config"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Manager coordinates menu operations
 type Manager struct {
-	stateManager  *StateManager
-	theme         MenuTheme
-	selectedItem  int
-	menuItems     []MenuItem
-	browser       ROMBrowser
-	currentScreen MenuScreen
-	searchManager *SearchManager
-	sortManager   *SortManager
-	configManager *config.ConfigManager
-	searchQuery   string
-	searchActive  bool
-	currentHelp   string
-	exportStatus  string
+	stateManager      *StateManager
+	theme             MenuTheme
+	selectedItem      int
+	menuItems         []MenuItem
+	browser           ROMBrowser
+	currentScreen     MenuScreen
+	searchManager     *SearchManager
+	sortManager       *SortManager
+	configManager     *config.ConfigManager
+	statisticsManager *StatisticsManager
+	searchQuery       string
+	searchActive      bool
+	currentHelp       string
+	exportStatus      string
+	exportDir         string
 }
 
 // NewManager creates a new menu manager
 func NewManager() *Manager {
+	// Get the data directory for exports
+	// homeDir, _ := os.UserHomeDir()
+	homeDir := "."
+	exportDir := filepath.Join(homeDir, "chip8_exports")
+
+	// Create export directory if it doesn't exist
+	os.MkdirAll(exportDir, 0755)
+
 	return &Manager{
-		stateManager:  nil, // Will be set externally
-		theme:         DefaultMenuTheme(),
-		selectedItem:  0,
-		menuItems:     createMainMenuItems(),
-		currentScreen: ScreenMain,
-		searchManager: NewSearchManager(),
-		sortManager:   NewSortManager(),
-		configManager: nil, // Will be set externally
-		searchQuery:   "",
-		searchActive:  false,
-		currentHelp:   "",
-		exportStatus:  "",
+		stateManager:      nil, // Will be set externally
+		theme:             DefaultMenuTheme(),
+		selectedItem:      0,
+		menuItems:         createMainMenuItems(),
+		currentScreen:     ScreenMain,
+		searchManager:     NewSearchManager(),
+		sortManager:       NewSortManager(),
+		configManager:     nil, // Will be set externally
+		statisticsManager: NewStatisticsManager(filepath.Join(exportDir, "stats")),
+		searchQuery:       "",
+		searchActive:      false,
+		currentHelp:       "",
+		exportStatus:      "",
+		exportDir:         exportDir,
 	}
 }
 
@@ -425,8 +441,8 @@ func (m *Manager) handleGoBack() {
 			m.selectedItem = 0
 		}
 	case ScreenExport:
-		// Clear export status and go back to main
-		m.exportStatus = ""
+		// Keep export status visible and go back to main
+		// Don't clear export status immediately so user can see the result
 		m.currentScreen = ScreenMain
 		m.menuItems = createMainMenuItems()
 		m.selectedItem = 0
@@ -696,25 +712,37 @@ func (m *Manager) LoadExportScreen() {
 
 // handleExportAction handles export operations
 func (m *Manager) handleExportAction(exportType string) {
+	// Debug: Log export attempt
+	fmt.Printf("Debug: Attempting to export %s\n", exportType)
+
 	if m.browser == nil {
 		m.exportStatus = "Error: Browser not available for export"
+		fmt.Println("Debug: Browser is nil")
 		return
 	}
 
+	fmt.Printf("Debug: Browser is available, export directory: %s\n", m.exportDir)
+
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
 	var filename string
+	var exportData interface{}
+	var err error
 
 	switch exportType {
 	case "favorites":
+		fmt.Println("Debug: Exporting favorites...")
 		favorites := m.browser.GetFavorites()
+		fmt.Printf("Debug: Found %d favorites\n", len(favorites))
+
 		if len(favorites) == 0 {
 			m.exportStatus = "No favorites to export"
 			return
 		}
 
 		// Convert to export format
-		exportData := make([]map[string]interface{}, len(favorites))
+		exportList := make([]map[string]interface{}, len(favorites))
 		for i, fav := range favorites {
-			exportData[i] = map[string]interface{}{
+			exportList[i] = map[string]interface{}{
 				"path":        fav.Path,
 				"name":        fav.Name,
 				"custom_name": fav.CustomName,
@@ -724,49 +752,125 @@ func (m *Manager) handleExportAction(exportType string) {
 			}
 		}
 
-		filename = "favorites_export.json"
-		m.exportStatus = fmt.Sprintf("Exported %d favorites to %s", len(favorites), filename)
+		exportData = map[string]interface{}{
+			"export_type": "favorites",
+			"export_time": time.Now().Format("2006-01-02 15:04:05"),
+			"total_count": len(favorites),
+			"favorites":   exportList,
+		}
+
+		filename = fmt.Sprintf("favorites_export_%s.json", timestamp)
 
 	case "recent":
+		fmt.Println("Debug: Exporting recent ROMs...")
 		recent := m.browser.GetRecentROMs()
+		fmt.Printf("Debug: Found %d recent ROMs\n", len(recent))
+
 		if len(recent) == 0 {
 			m.exportStatus = "No recent ROMs to export"
 			return
 		}
 
 		// Convert to export format
-		exportData := make([]map[string]interface{}, len(recent))
+		exportList := make([]map[string]interface{}, len(recent))
 		for i, rom := range recent {
-			exportData[i] = map[string]interface{}{
+			exportList[i] = map[string]interface{}{
 				"path":        rom.Path,
 				"name":        rom.Name,
 				"last_played": rom.LastPlayed,
 				"play_count":  rom.PlayCount,
+				"is_favorite": rom.IsFavorite,
 			}
 		}
 
-		filename = "recent_roms_export.json"
-		m.exportStatus = fmt.Sprintf("Exported %d recent ROMs to %s", len(recent), filename)
-	case "statistics":
-		// For now, create basic statistics
-		favorites := m.browser.GetFavorites()
-		recent := m.browser.GetRecentROMs()
-
-		_ = map[string]interface{}{
-			"total_favorites":  len(favorites),
-			"total_recent":     len(recent),
-			"export_date":      "2025-06-16", // TODO: Use current date
-			"emulator_version": "1.0.0",      // TODO: Get from version
+		exportData = map[string]interface{}{
+			"export_type": "recent_roms",
+			"export_time": time.Now().Format("2006-01-02 15:04:05"),
+			"total_count": len(recent),
+			"recent_roms": exportList,
 		}
 
-		filename = "statistics_export.json"
-		m.exportStatus = fmt.Sprintf("Exported statistics to %s", filename)
+		filename = fmt.Sprintf("recent_roms_export_%s.json", timestamp)
+
+	case "statistics":
+		fmt.Println("Debug: Exporting statistics...")
+		if m.statisticsManager == nil {
+			m.exportStatus = "Error: Statistics manager not available"
+			fmt.Println("Debug: Statistics manager is nil")
+			return
+		}
+
+		// Get comprehensive statistics
+		statsData, err := m.statisticsManager.ExportStatistics()
+		if err != nil {
+			m.exportStatus = fmt.Sprintf("Error exporting statistics: %v", err)
+			fmt.Printf("Debug: Statistics export error: %v\n", err)
+			return
+		}
+
+		exportData = map[string]interface{}{
+			"export_type": "statistics",
+			"export_time": time.Now().Format("2006-01-02 15:04:05"),
+			"statistics":  statsData,
+		}
+
+		filename = fmt.Sprintf("statistics_export_%s.json", timestamp)
 
 	default:
 		m.exportStatus = fmt.Sprintf("Unknown export type: %s", exportType)
+		fmt.Printf("Debug: Unknown export type: %s\n", exportType)
 		return
 	}
 
+	fmt.Printf("Debug: Writing export file: %s\n", filename)
+
+	// Write the export data to file
+	err = m.writeExportFile(filename, exportData)
+	if err != nil {
+		m.exportStatus = fmt.Sprintf("Error writing export file: %v", err)
+		fmt.Printf("Debug: File write error: %v\n", err)
+		return
+	}
+
+	filePath := filepath.Join(m.exportDir, filename)
+	m.exportStatus = fmt.Sprintf("Successfully exported to: %s", filePath)
+	fmt.Printf("Debug: Export successful: %s\n", filePath)
+}
+
+// writeExportFile writes export data to a JSON file
+func (m *Manager) writeExportFile(filename string, data interface{}) error {
+	filePath := filepath.Join(m.exportDir, filename)
+	fmt.Printf("Debug: Writing to file path: %s\n", filePath)
+
+	// Ensure export directory exists
+	if err := os.MkdirAll(m.exportDir, 0755); err != nil {
+		fmt.Printf("Debug: Failed to create export directory: %v\n", err)
+		return fmt.Errorf("failed to create export directory: %w", err)
+	}
+	fmt.Printf("Debug: Export directory created/verified: %s\n", m.exportDir)
+
+	// Marshal data to JSON
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		fmt.Printf("Debug: Failed to marshal JSON: %v\n", err)
+		return fmt.Errorf("failed to marshal export data: %w", err)
+	}
+	fmt.Printf("Debug: JSON data marshaled, size: %d bytes\n", len(jsonData))
+
+	// Write to file
+	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
+		fmt.Printf("Debug: Failed to write file: %v\n", err)
+		return fmt.Errorf("failed to write export file: %w", err)
+	}
+
+	// Verify file was written
+	if stat, err := os.Stat(filePath); err == nil {
+		fmt.Printf("Debug: File written successfully, size: %d bytes\n", stat.Size())
+	} else {
+		fmt.Printf("Debug: Warning - Could not verify file: %v\n", err)
+	}
+
+	return nil
 }
 
 // getActionForROM returns the appropriate action for a ROM
@@ -955,4 +1059,29 @@ func (m *Manager) ClearCurrentHelp() {
 // GetExportStatus returns the current export status
 func (m *Manager) GetExportStatus() string {
 	return m.exportStatus
+}
+
+// ClearExportStatus clears the export status message
+func (m *Manager) ClearExportStatus() {
+	m.exportStatus = ""
+}
+
+// SetExportStatus sets the export status message
+func (m *Manager) SetExportStatus(status string) {
+	m.exportStatus = status
+}
+
+// HasExportStatus returns true if there's an export status message
+func (m *Manager) HasExportStatus() bool {
+	return m.exportStatus != ""
+}
+
+// GetStatisticsManager returns the statistics manager
+func (m *Manager) GetStatisticsManager() *StatisticsManager {
+	return m.statisticsManager
+}
+
+// SetStatisticsManager sets the statistics manager
+func (m *Manager) SetStatisticsManager(statsManager *StatisticsManager) {
+	m.statisticsManager = statsManager
 }
