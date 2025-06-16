@@ -359,6 +359,35 @@ func (mr *MenuRenderer) RenderExportScreen(items []MenuItem, selected int, statu
 	return nil
 }
 
+// RenderROMBrowserMenu renders the ROM browser screen using menu items
+func (mr *MenuRenderer) RenderROMBrowserMenu(items []MenuItem, selected int, currentPath string) error {
+	// Clear screen with background color
+	mr.baseRenderer.ClearWithColor(mr.theme.BackgroundColor)
+
+	// Render header with current path
+	headerText := fmt.Sprintf("ROM Browser - %s", filepath.Base(currentPath))
+	err := mr.renderHeader(headerText)
+	if err != nil {
+		return fmt.Errorf("failed to render header: %w", err)
+	}
+
+	// Render menu items directly (they already contain proper formatting and actions)
+	err = mr.renderMenuItems(items, selected, currentPath)
+	if err != nil {
+		return fmt.Errorf("failed to render ROM browser items: %w", err)
+	}
+
+	// Render footer with help
+	helpText := "↑/↓: Navigate  Enter: Select  ESC: Back  F: Toggle Favorite"
+	err = mr.renderFooter(helpText)
+	if err != nil {
+		return fmt.Errorf("failed to render footer: %w", err)
+	}
+
+	mr.baseRenderer.Present()
+	return nil
+}
+
 // renderHeader renders the header section
 func (mr *MenuRenderer) renderHeader(title string) error {
 	x, y, width, _ := mr.layout.CalculateHeaderBounds()

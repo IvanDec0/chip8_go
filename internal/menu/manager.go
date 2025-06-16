@@ -300,6 +300,9 @@ func (m *Manager) LoadROMBrowser() error {
 		return nil // No browser available
 	}
 
+	// Set current screen to browser
+	m.currentScreen = ScreenBrowser
+
 	currentDir := m.browser.GetCurrentDirectory()
 	// Scan current directory with metadata
 	roms, err := m.browser.ScanDirectoryWithMetadata(currentDir)

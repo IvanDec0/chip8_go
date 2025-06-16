@@ -360,23 +360,23 @@ func (e *Emulator) renderMenu() {
 		exportStatus := e.menuManager.GetExportStatus()
 		e.menuRenderer.RenderExportScreen(items, selected, exportStatus)
 
-	default:
-		// Check if we're in ROM browser mode by looking at menu items
+	case menu.ScreenBrowser:
+		// Render ROM browser using menu items (which include navigation items)
 		items := e.menuManager.GetMenuItems()
-		if len(items) > 0 && items[0].Action == menu.ActionGoBack {
-			// We're in ROM browser mode
-			browser := e.menuManager.GetBrowser()
-			if browser != nil {
-				roms := browser.GetROMs()
-				selected := e.menuManager.GetSelectedItem()
-				currentPath := browser.GetCurrentDirectory()
-				e.menuRenderer.RenderROMBrowser(roms, selected, currentPath)
-			}
+		selected := e.menuManager.GetSelectedItem()
+		browser := e.menuManager.GetBrowser()
+		if browser != nil {
+			currentPath := browser.GetCurrentDirectory()
+			e.menuRenderer.RenderROMBrowserMenu(items, selected, currentPath)
 		} else {
-			// Fallback to main menu
-			selected := e.menuManager.GetSelectedItem()
 			e.menuRenderer.RenderMainMenu(items, selected)
 		}
+
+	default:
+		// Fallback to main menu for any other screens
+		items := e.menuManager.GetMenuItems()
+		selected := e.menuManager.GetSelectedItem()
+		e.menuRenderer.RenderMainMenu(items, selected)
 	}
 }
 
